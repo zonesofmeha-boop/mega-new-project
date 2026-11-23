@@ -108,6 +108,28 @@ cd tcp-network-protocol-simulator
 npm install
 ```
 
+### MongoDB Atlas API
+
+The Vercel API routes use the `MONGODB_URI` environment variable and the database
+specified in that URI. When using Vercel CLI for local API development, copy
+[.env.example](./.env.example) to `.env`, replace the password and existing
+database name, and URL-encode special characters in the password. The standalone
+Vite development server does not serve the API routes. Never use a `VITE_`
+prefix for this secret.
+
+In Vercel, add `MONGODB_URI` under **Project Settings → Environment Variables**
+for each environment you deploy. Use the existing `Cluster0` hostname
+`cluster0.uw7mdl8.mongodb.net` and the existing database name; do not use a
+placeholder hostname or create a new database. Ensure the Atlas database user
+has access to that database and that Atlas Network Access allows Vercel's
+connection. Redeploy after changing environment variables.
+
+`GET /api/health` checks the database connection. `GET /api/simulations?simulationId=<id>`
+retrieves a saved run by its simulation ID. `POST /api/simulations` saves a
+simulator run including its scenario, event and packet history, endpoint states,
+timeline, and results. The app automatically saves simulation updates in
+production.
+
 ### Development Server
 ```bash
 npm run dev

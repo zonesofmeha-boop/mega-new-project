@@ -8,12 +8,14 @@ import {
   FailureConfig,
 } from '../engine/types';
 import { getScenarioById } from '../engine/scenarios';
+import { scheduleSimulationSave } from '../services/simulationPersistence';
 
 export type AppTab = 'visualizer' | 'scenarios' | 'learn' | 'about';
 
 interface SimulatorStoreState {
   simulator: TcpSimulator;
   snapshot: TcpSnapshot;
+  simulationId: string;
   activeTab: AppTab;
   selectedScenarioId: string;
   isPlaying: boolean;
@@ -75,13 +77,19 @@ function createSimulatorForScenario(scenarioId: string, mss: number = 16): TcpSi
   return sim;
 }
 
+function createSimulationId(): string {
+  return globalThis.crypto.randomUUID();
+}
+
 export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
   const initialScenarioId = 'normal_lifecycle';
   const initialSim = createSimulatorForScenario(initialScenarioId, 16);
+  const initialSimulationId = createSimulationId();
 
   return {
     simulator: initialSim,
     snapshot: initialSim.getSnapshot(),
+    simulationId: initialSimulationId,
     activeTab: 'visualizer',
     selectedScenarioId: initialScenarioId,
     isPlaying: false,
@@ -100,24 +108,30 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
 
     init: (scenarioId = get().selectedScenarioId) => {
       const sim = createSimulatorForScenario(scenarioId, get().mss);
+      const simulationId = createSimulationId();
       set({
         simulator: sim,
         snapshot: sim.getSnapshot(),
+        simulationId,
         selectedScenarioId: scenarioId,
         isPlaying: false,
         selectedPacket: null,
       });
+      scheduleSimulationSave(simulationId, scenarioId, sim);
     },
 
     reset: () => {
       const scenarioId = get().selectedScenarioId;
       const sim = createSimulatorForScenario(scenarioId, get().mss);
+      const simulationId = createSimulationId();
       set({
         simulator: sim,
         snapshot: sim.getSnapshot(),
+        simulationId,
         isPlaying: false,
         selectedPacket: null,
       });
+      scheduleSimulationSave(simulationId, scenarioId, sim);
     },
 
     stepForward: () => {
@@ -129,6 +143,7 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
       simulator.step();
       const snap = simulator.getSnapshot();
       set({ snapshot: snap });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
 
     stepBackward: () => {
@@ -137,12 +152,14 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
       const prevIndex = simulator.getCursor() - 1;
       simulator.seek(prevIndex);
       set({ snapshot: simulator.getSnapshot(), isPlaying: false });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
 
     seek: (index: number) => {
       const { simulator } = get();
       simulator.seek(index);
       set({ snapshot: simulator.getSnapshot(), isPlaying: false });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
 
     togglePlay: () => {
@@ -182,8 +199,10 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
       const scenario = getScenarioById(scenarioId);
       const effectiveMss = scenario.initialMss ?? get().mss;
       const sim = createSimulatorForScenario(scenarioId, effectiveMss);
+      const simulationId = createSimulationId();
       set({
         selectedScenarioId: scenarioId,
+        simulationId,
         mss: effectiveMss,
         customMessage: scenario.initialMessage ?? get().customMessage,
         simulator: sim,
@@ -191,6 +210,7 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
         isPlaying: false,
         selectedPacket: null,
       });
+      scheduleSimulationSave(simulationId, scenarioId, sim);
     },
 
     setActiveTab: (tab: AppTab) => set({ activeTab: tab }),
@@ -207,6 +227,7 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
       simulator.clientOpen();
       simulator.step();
       set({ snapshot: simulator.getSnapshot() });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
 
     sendData: (text?: string, endpoint: EndpointId = 'client') => {
@@ -215,6 +236,7 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
       simulator.sendData(msg, endpoint);
       simulator.step();
       set({ snapshot: simulator.getSnapshot() });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
 
     closeConnection: (endpoint: EndpointId = 'client') => {
@@ -222,6 +244,7 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
       simulator.closeConnection(endpoint);
       simulator.step();
       set({ snapshot: simulator.getSnapshot() });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
 
     abortConnection: (endpoint: EndpointId = 'client') => {
@@ -229,18 +252,21 @@ export const useSimulatorStore = create<SimulatorStoreState>((set, get) => {
       simulator.abortConnection(endpoint);
       simulator.step();
       set({ snapshot: simulator.getSnapshot() });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
 
     injectFailure: (type: FailureType, config?: Partial<FailureConfig>) => {
       const { simulator } = get();
       simulator.setFailure(type, true, config);
       set({ snapshot: simulator.getSnapshot() });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
 
     clearFailures: () => {
       const { simulator } = get();
       simulator.clearAllFailures();
       set({ snapshot: simulator.getSnapshot() });
+      scheduleSimulationSave(get().simulationId, get().selectedScenarioId, simulator);
     },
   };
 });
